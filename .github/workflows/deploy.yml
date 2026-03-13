@@ -1,34 +1,16 @@
-name: Deploy
+name: CI
 
 on:
   push:
     branches:
-      - develop   # → deploy test env
-      - main      # → deploy prd env
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+      - develop
+      - main
+  pull_request:
+    branches:
+      - develop
+      - main
 
 jobs:
-  # ─── Determine environment from branch ───
-  setup:
-    runs-on: ubuntu-latest
-    outputs:
-      environment: ${{ steps.env.outputs.environment }}
-      deploy_host: ${{ steps.env.outputs.deploy_host }}
-    steps:
-      - name: Set environment from branch
-        id: env
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "environment=prd" >> $GITHUB_OUTPUT
-            echo "deploy_host=DEPLOY_HOST_PRD" >> $GITHUB_OUTPUT
-          else
-            echo "environment=test" >> $GITHUB_OUTPUT
-            echo "deploy_host=DEPLOY_HOST_TEST" >> $GITHUB_OUTPUT
-          fi
-
   # ─── Build & Test ───
   build:
     runs-on: ubuntu-latest
@@ -53,16 +35,38 @@ jobs:
       - name: Test
         run: npx vitest run 2>&1 || echo "No test files found, skipping"
 
-  # ─── Deploy ───
+  # ─── Deploy (ทำงานเฉพาะเมื่อตั้ง secrets แล้ว) ───
   deploy:
-    needs: [setup, build]
+    needs: build
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: ${{ needs.setup.outputs.environment }}
     steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=prd" >> $GITHUB_OUTPUT
+            echo "deploy_host=DEPLOY_HOST_PRD" >> $GITHUB_OUTPUT
+          else
+            echo "environment=test" >> $GITHUB_OUTPUT
+            echo "deploy_host=DEPLOY_HOST_TEST" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check deploy secrets
+        id: check
+        run: |
+          if [[ -n "${{ secrets.DEPLOY_SSH_KEY }}" ]]; then
+            echo "ready=true" >> $GITHUB_OUTPUT
+          else
+            echo "ready=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Deploy skipped — DEPLOY_SSH_KEY not configured"
+          fi
+
       - name: Deploy via SSH
+        if: steps.check.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets[needs.setup.outputs.deploy_host] }}
+          host: ${{ secrets[steps.env.outputs.deploy_host] }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
