@@ -37,11 +37,11 @@ export const laws = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [
-    index("idx_laws_category").on(table.categoryKey),
-    index("idx_laws_year").on(table.year),
-    index("idx_laws_status").on(table.status),
-  ]
+  (table) => ({
+    categoryIdx: index("idx_laws_category").on(table.categoryKey),
+    yearIdx: index("idx_laws_year").on(table.year),
+    statusIdx: index("idx_laws_status").on(table.status),
+  })
 );
 
 // --- Law Sections ---
@@ -59,7 +59,9 @@ export const lawSections = pgTable(
     contentEn: text("content_en"),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("idx_sections_law").on(table.lawId)]
+  (table) => ({
+    lawIdx: index("idx_sections_law").on(table.lawId),
+  })
 );
 
 // --- Glossary ---
@@ -78,7 +80,9 @@ export const glossary = pgTable(
     relatedTerms: jsonb("related_terms").$type<string[]>().default([]),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("idx_glossary_category").on(table.categoryKey)]
+  (table) => ({
+    categoryIdx: index("idx_glossary_category").on(table.categoryKey),
+  })
 );
 
 // --- Templates ---
@@ -102,10 +106,10 @@ export const templates = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [
-    index("idx_templates_type").on(table.type),
-    index("idx_templates_variant").on(table.variant),
-  ]
+  (table) => ({
+    typeIdx: index("idx_templates_type").on(table.type),
+    variantIdx: index("idx_templates_variant").on(table.variant),
+  })
 );
 
 // --- API Keys ---
@@ -135,5 +139,7 @@ export const auditLogs = pgTable(
     responseTimeMs: integer("response_time_ms"),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (table) => [index("idx_audit_created").on(table.createdAt)]
+  (table) => ({
+    createdIdx: index("idx_audit_created").on(table.createdAt),
+  })
 );
