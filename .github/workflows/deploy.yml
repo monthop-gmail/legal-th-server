@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - develop   # → deploy test env
+      - main      # → deploy prd env
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ─── Determine environment from branch ───
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      deploy_host: ${{ steps.env.outputs.deploy_host }}
+    steps:
+      - name: Set environment from branch
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=prd" >> $GITHUB_OUTPUT
+            echo "deploy_host=DEPLOY_HOST_PRD" >> $GITHUB_OUTPUT
+          else
+            echo "environment=test" >> $GITHUB_OUTPUT
+            echo "deploy_host=DEPLOY_HOST_TEST" >> $GITHUB_OUTPUT
+          fi
+
+  # ─── Build & Test ───
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  # ─── Deploy ───
+  deploy:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup.outputs.environment }}
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets[needs.setup.outputs.deploy_host] }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/services/legal-th-server
+            git pull origin ${{ github.ref_name }}
+
+            # Decrypt secrets
+            export SOPS_AGE_KEY="${{ secrets.SOPS_AGE_KEY }}"
+            sops --decrypt .env.enc > .env
+
+            # Deploy with production override
+            docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d --build
+
+            # Verify health
+            sleep 10
+            curl -f http://localhost:3000/health || exit 1

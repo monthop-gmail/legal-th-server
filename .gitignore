@@ -4,10 +4,15 @@ node_modules/
 # Build
 dist/
 
-# Environment
+# Environment — ห้าม commit .env ค่าจริง
 .env
 .env.local
 .env.*.local
+# .env.enc ไม่อยู่ใน ignore (commit ได้ เพราะ encrypted)
+
+# Secrets / Keys
+*.key
+keys.txt
 
 # IDE
 .vscode/

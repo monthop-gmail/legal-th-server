@@ -1,46 +1,23 @@
+# Development override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
 services:
-  # --- MCP Server (dev mode with hot reload) ---
   app:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
     environment:
       NODE_ENV: development
-      PORT: 3000
-      HOST: 0.0.0.0
-      DATABASE_URL: postgres://legal_th:legal_th_pass@db:5432/legal_th
-      API_KEY_SALT: dev-salt
-      RATE_LIMIT_MAX: 1000
-      RATE_LIMIT_WINDOW_MS: 60000
       LOG_LEVEL: debug
+      RATE_LIMIT_MAX: 1000
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
       - ./data:/app/data
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
 
-  # --- PostgreSQL ---
   db:
-    image: postgres:16-alpine
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_USER: legal_th
-      POSTGRES_PASSWORD: legal_th_pass
-      POSTGRES_DB: legal_th
-    volumes:
-      - pgdata_dev:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U legal_th"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
 
   # --- Adminer (DB GUI) ---
   adminer:
@@ -50,6 +27,3 @@ services:
     depends_on:
       - db
     restart: unless-stopped
-
-volumes:
-  pgdata_dev:

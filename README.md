@@ -29,6 +29,10 @@ Client Plugins (Claude Code, OpenCode, ...)
 │  └─ Drizzle ORM                 │
 │      └─ PostgreSQL              │
 └─────────────────────────────────┘
+         │
+    CF Tunnel (optional)
+         │
+    *.legal-th.example.com
 ```
 
 ## Tech Stack
@@ -37,10 +41,13 @@ Client Plugins (Claude Code, OpenCode, ...)
 |-------|-----------|
 | Runtime | Node.js 20+ (TypeScript) |
 | Framework | Fastify 5 |
-| Database | PostgreSQL |
+| Database | PostgreSQL 16 |
 | ORM | Drizzle |
 | Validation | Zod |
 | Logging | Pino |
+| Tunnel | Cloudflare Tunnel |
+| Secrets | SOPS + age |
+| CI/CD | GitHub Actions |
 
 ---
 
@@ -68,16 +75,22 @@ legal-th-server/
 │   └── templates/                # JSON data: template สัญญา
 ├── scripts/
 │   ├── migrate.ts                # Database migration
-│   └── seed.ts                   # Seed data
-├── tests/
+│   ├── seed.ts                   # Seed data
+│   └── deploy.sh                 # Manual deploy script
+├── .github/
+│   └── workflows/
+│       └── deploy.yml            # CI/CD: auto deploy from branch
+├── docker-compose.yml            # Base (app + PostgreSQL + CF Tunnel)
+├── docker-compose.dev.yml        # Dev override (hot reload + Adminer)
+├── docker-compose.prd.yml        # Prd override (limits + healthcheck)
+├── Dockerfile                    # Production image
+├── Dockerfile.dev                # Dev image (hot reload)
+├── .env.example                  # Environment template (commit ได้)
+├── .sops.yaml                    # SOPS config (commit ได้)
+├── .env.enc                      # Encrypted secrets (commit ได้)
 ├── package.json
 ├── tsconfig.json
 ├── drizzle.config.ts
-├── Dockerfile                    # Production image
-├── Dockerfile.dev                # Dev image (hot reload)
-├── docker-compose.yml            # Production (app + PostgreSQL)
-├── docker-compose.dev.yml        # Dev (app + PostgreSQL + Adminer)
-├── .env.example
 └── legal-th-server-spec.md       # Full specification
 ```
 
@@ -111,7 +124,7 @@ legal-th-server/
 
 ## Quick Start
 
-### วิธีที่ 1: Docker Compose (แนะนำ)
+### Docker Compose (แนะนำ)
 
 ไม่ต้องติดตั้ง Node.js หรือ PostgreSQL เอง
 
@@ -120,11 +133,17 @@ legal-th-server/
 git clone https://github.com/monthop-gmail/legal-th-server.git
 cd legal-th-server
 
+# Copy environment
+cp .env.example .env
+
 # Development mode (hot reload + Adminer DB GUI)
-docker compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 # Production mode
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d
+
+# Production + Cloudflare Tunnel
+docker compose -f docker-compose.yml -f docker-compose.prd.yml --profile tunnel up -d
 ```
 
 **Services ที่ได้:**
@@ -133,71 +152,46 @@ docker compose up -d
 |---------|-----|---------|
 | MCP Server | http://localhost:3000 | API endpoint |
 | Health Check | http://localhost:3000/health | ตรวจสถานะ |
-| Adminer (dev) | http://localhost:8080 | DB GUI (เลือก PostgreSQL, server: `db`, user: `legal_th`, pass: `legal_th_pass`) |
-| PostgreSQL | localhost:5432 | เชื่อมจาก tools ภายนอก |
+| Adminer (dev) | http://localhost:8080 | DB GUI |
+| PostgreSQL (dev) | localhost:5432 | เชื่อมจาก tools ภายนอก |
+| CF Tunnel (prd) | *.legal-th.example.com | Public URL ผ่าน Cloudflare |
 
-**Development mode พิเศษ:**
-- Hot reload — แก้ `src/` แล้ว restart อัตโนมัติ
-- Source mount — แก้ไฟล์บนเครื่องได้เลย ไม่ต้อง rebuild
-- Adminer — ดูข้อมูลใน DB ผ่าน browser
-- Rate limit ยกเลิก (1000 req/min)
-- Log level: debug
-
-**คำสั่งที่ใช้บ่อย:**
+### คำสั่งที่ใช้บ่อย
 
 ```bash
-# เริ่ม dev
-docker compose -f docker-compose.dev.yml up
+# ─── Development ───
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up        # เริ่ม dev
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d     # background
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f   # ดู logs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down      # หยุด
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v   # หยุด + ลบ DB
 
-# เริ่ม dev แบบ background
-docker compose -f docker-compose.dev.yml up -d
+# ─── Migration & Seed ───
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec app npm run db:migrate
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec app npm run db:seed
 
-# ดู logs
-docker compose -f docker-compose.dev.yml logs -f app
-
-# Run migration
-docker compose -f docker-compose.dev.yml exec app npm run db:migrate
-
-# Run seed
-docker compose -f docker-compose.dev.yml exec app npm run db:seed
-
-# หยุด
-docker compose -f docker-compose.dev.yml down
-
-# หยุด + ลบ data (reset DB)
-docker compose -f docker-compose.dev.yml down -v
+# ─── Deploy (manual) ───
+./scripts/deploy.sh dev    # deploy dev
+./scripts/deploy.sh prd    # deploy production
 ```
 
 ---
 
-### วิธีที่ 2: Manual Setup
+### Manual Setup
 
 #### Prerequisites
 
 - Node.js 20+
 - PostgreSQL 16+
 
-#### Setup
-
 ```bash
-# Clone
 git clone https://github.com/monthop-gmail/legal-th-server.git
 cd legal-th-server
-
-# Install dependencies
 npm install
-
-# Configure environment
 cp .env.example .env
-# Edit .env — เปลี่ยน DATABASE_URL ให้ชี้ไป PostgreSQL ของคุณ
-
-# Run migrations
+# Edit .env
 npm run db:migrate
-
-# Seed data
 npm run db:seed
-
-# Start development server
 npm run dev
 ```
 
@@ -229,6 +223,86 @@ curl -X POST http://localhost:3000/mcp \
     "params": { "term": "นิติกรรม" }
   }'
 ```
+
+---
+
+## Environment & Deployment
+
+### Environment Separation
+
+| Environment | Branch | DNS Pattern | Deploy |
+|-------------|--------|-------------|--------|
+| dev | `feature/*` → `develop` | `svc.dev.legal-th.example.com` | manual |
+| test | `develop` | `svc.test.legal-th.example.com` | auto (push to develop) |
+| prd | `main` | `svc.legal-th.example.com` | auto (push to main) |
+
+### Compose Pattern
+
+```
+docker-compose.yml          ← base (ใช้ร่วมทุก env)
+  + docker-compose.dev.yml  ← dev override (hot reload, Adminer, DB port)
+  + docker-compose.prd.yml  ← prd override (resource limits, healthcheck, tunnel)
+```
+
+ต่างกันแค่ `.env` + override file — Dockerfile และ source code เหมือนกันทุก env
+
+### Secret Management (SOPS + age)
+
+```bash
+# ติดตั้ง
+brew install sops age            # macOS
+# หรือ apt install age && go install ... sops
+
+# สร้าง key pair
+age-keygen -o keys.txt
+# เก็บที่ ~/.config/sops/age/keys.txt
+mkdir -p ~/.config/sops/age && mv keys.txt ~/.config/sops/age/
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt
+
+# เพิ่ม public key ใน .sops.yaml
+
+# Encrypt / Decrypt
+sops --encrypt .env > .env.enc   # encrypt → commit ได้
+sops --decrypt .env.enc > .env   # decrypt → ใช้งาน
+sops .env.enc                    # edit in-place
+```
+
+**สำคัญ:** `.env` ห้าม commit / `.env.enc` commit ได้ / ส่ง key ผ่าน 1Password หรือ Signal เท่านั้น
+
+### Cloudflare Tunnel
+
+1. สร้าง Tunnel บน [Cloudflare Dashboard](https://one.dash.cloudflare.com/)
+2. ตั้ง Public Hostname เช่น `svc.legal-th.example.com → http://app:3000`
+3. Copy token → ใส่ `CF_TUNNEL_TOKEN` ใน `.env`
+4. `docker compose --profile tunnel up -d`
+
+### CI/CD (GitHub Actions)
+
+| Trigger | Action |
+|---------|--------|
+| Push to `develop` | Auto deploy → test env |
+| Push to `main` | Auto deploy → prd env |
+
+**GitHub Secrets ที่ต้องตั้ง:**
+
+| Secret | คำอธิบาย |
+|--------|---------|
+| `DEPLOY_HOST_TEST` | IP/hostname ของ test server |
+| `DEPLOY_HOST_PRD` | IP/hostname ของ prd server |
+| `DEPLOY_USER` | SSH username |
+| `DEPLOY_SSH_KEY` | SSH private key |
+| `SOPS_AGE_KEY` | age private key content |
+
+### Git Branching
+
+```
+feature/xxx → develop → main
+               │          │
+           auto test   auto prd
+```
+
+- `develop`: ต้องมี 1 approval
+- `main`: ต้องมี 2 approvals + CI pass
 
 ---
 
@@ -271,7 +345,12 @@ glossary          templates           api_keys
 - [x] Database schema (Drizzle)
 - [x] Auth middleware stub
 - [x] Environment config (Zod)
-- [x] Dockerfile
+- [x] Dockerfile (prod + dev)
+- [x] Docker Compose (base + dev + prd override)
+- [x] Cloudflare Tunnel sidecar
+- [x] SOPS + age secret management
+- [x] GitHub Actions deploy workflow
+- [x] Deploy script
 - [x] Full specification document
 
 ### What's Next
@@ -280,7 +359,9 @@ glossary          templates           api_keys
 - [ ] Populate initial data (50 laws, 200 glossary, 10 templates)
 - [ ] Implement service logic
 - [ ] Write tests
-- [ ] Deploy to Railway/Render
+- [ ] Configure CF Tunnel per env
+- [ ] Branch protection rules
+- [ ] CODEOWNERS file
 - [ ] Connect with client plugins
 
 ---
@@ -299,7 +380,7 @@ glossary          templates           api_keys
 - **ข้อมูลกฎหมาย** — JSON data files ใน `data/`
 - **Thai full-text search** — PostgreSQL Thai tokenizer
 - **Tests** — Unit + integration tests
-- **Deployment** — Docker Compose, Railway config
+- **Infrastructure** — CF Tunnel, monitoring, alerting
 
 ---
 
