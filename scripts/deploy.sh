@@ -31,7 +31,7 @@ case "$ENV" in
     COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f docker-compose.prd.yml"
     ;;
   prd)
-    COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f docker-compose.prd.yml --profile tunnel"
+    COMPOSE_CMD="docker compose -f $COMPOSE_BASE -f docker-compose.prd.yml"
     ;;
   *)
     echo "Unknown environment: $ENV"

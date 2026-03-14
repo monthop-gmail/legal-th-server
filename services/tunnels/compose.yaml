@@ -1,0 +1,9 @@
+services:
+  tunnel-app:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    depends_on:
+      - app
+    networks:
+      - legal-th-net
+    restart: unless-stopped

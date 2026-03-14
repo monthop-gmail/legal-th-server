@@ -69,6 +69,11 @@ legal-th-server/
 │   │   └── auth.ts               # API key authentication
 │   └── utils/
 │       └── env.ts                # Environment config (Zod)
+├── services/                     # Modular compose (Docker Compose v2.20+)
+│   ├── app/compose.yaml          # MCP Server service
+│   ├── postgres/compose.yaml     # PostgreSQL 16
+│   ├── redis/compose.yaml        # Redis (Phase 2)
+│   └── tunnels/compose.yaml      # Cloudflare Tunnel
 ├── data/
 │   ├── laws/                     # JSON data: กฎหมาย
 │   ├── glossary/                 # JSON data: ศัพท์กฎหมาย
@@ -80,7 +85,7 @@ legal-th-server/
 ├── .github/
 │   └── workflows/
 │       └── deploy.yml            # CI/CD: auto deploy from branch
-├── docker-compose.yml            # Base (app + PostgreSQL + CF Tunnel)
+├── docker-compose.yml            # Root: include services/* (modular)
 ├── docker-compose.dev.yml        # Dev override (hot reload + Adminer)
 ├── docker-compose.prd.yml        # Prd override (limits + healthcheck)
 ├── Dockerfile                    # Production image
@@ -142,8 +147,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 # Production mode
 docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d
 
-# Production + Cloudflare Tunnel
-docker compose -f docker-compose.yml -f docker-compose.prd.yml --profile tunnel up -d
+# Production (includes CF Tunnel)
+docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d
 ```
 
 **Services ที่ได้:**
@@ -154,7 +159,7 @@ docker compose -f docker-compose.yml -f docker-compose.prd.yml --profile tunnel 
 | Health Check | http://localhost:3000/health | ตรวจสถานะ |
 | Adminer (dev) | http://localhost:8080 | DB GUI |
 | PostgreSQL (dev) | localhost:5432 | เชื่อมจาก tools ภายนอก |
-| CF Tunnel (prd) | *.legal-th.example.com | Public URL ผ่าน Cloudflare |
+| CF Tunnel | *.legal-th.example.com | Public URL ผ่าน Cloudflare (ทุก env) |
 
 ### คำสั่งที่ใช้บ่อย
 
@@ -236,15 +241,22 @@ curl -X POST http://localhost:3000/mcp \
 | test | `develop` | `svc.test.legal-th.example.com` | auto (push to develop) |
 | prd | `main` | `svc.legal-th.example.com` | auto (push to main) |
 
-### Compose Pattern
+### Compose Pattern (Modular)
 
 ```
-docker-compose.yml          ← base (ใช้ร่วมทุก env)
-  + docker-compose.dev.yml  ← dev override (hot reload, Adminer, DB port)
-  + docker-compose.prd.yml  ← prd override (resource limits, healthcheck, tunnel)
+docker-compose.yml              ← root: include services/*
+  ├── services/app/compose.yaml       ← MCP Server
+  ├── services/postgres/compose.yaml  ← PostgreSQL 16
+  ├── services/redis/compose.yaml     ← Redis (Phase 2)
+  └── services/tunnels/compose.yaml   ← CF Tunnel
+  + docker-compose.dev.yml     ← dev override (hot reload, Adminer, DB port)
+  + docker-compose.prd.yml     ← prd override (resource limits, healthcheck)
 ```
 
-ต่างกันแค่ `.env` + override file — Dockerfile และ source code เหมือนกันทุก env
+- ใช้ Docker Compose `include:` (v2.20+) แยก service ต่อไฟล์
+- เพิ่ม/ลบ service แค่เพิ่มไฟล์ + include ไม่ต้องแก้ไฟล์หลัก
+- ทุก service อยู่ใน shared network `legal-th-net`
+- ต่างกันแค่ `.env` + override file — Dockerfile และ source code เหมือนกันทุก env
 
 ### Secret Management (SOPS + age)
 
@@ -274,7 +286,7 @@ sops .env.enc                    # edit in-place
 1. สร้าง Tunnel บน [Cloudflare Dashboard](https://one.dash.cloudflare.com/)
 2. ตั้ง Public Hostname เช่น `svc.legal-th.example.com → http://app:3000`
 3. Copy token → ใส่ `CF_TUNNEL_TOKEN` ใน `.env`
-4. `docker compose --profile tunnel up -d`
+4. `docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d`
 
 ### CI/CD (GitHub Actions)
 

@@ -1,0 +1,16 @@
+services:
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file: ../../.env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-legal_th}:${POSTGRES_PASSWORD:-legal_th_pass}@postgres:5432/${POSTGRES_DB:-legal_th}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - legal-th-net
+    restart: unless-stopped

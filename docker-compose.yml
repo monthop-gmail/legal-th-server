@@ -1,50 +1,16 @@
-# Base compose — ใช้ร่วมกันทุก env (dev/test/prd)
-# ต่างกันแค่ .env และ override file
+# Root compose — modular pattern (Docker Compose v2.20+)
+# แต่ละ service อยู่ใน services/*/compose.yaml
 #
 # Dev:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 # Prd:  docker compose -f docker-compose.yml -f docker-compose.prd.yml up -d
 
-services:
-  # --- MCP Server ---
-  app:
-    build: .
-    ports:
-      - "${PORT:-3000}:3000"
-    env_file: .env
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-legal_th}:${POSTGRES_PASSWORD:-legal_th_pass}@db:5432/${POSTGRES_DB:-legal_th}
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
+include:
+  - path: ./services/app/compose.yaml
+  - path: ./services/postgres/compose.yaml
+  # - path: ./services/redis/compose.yaml        # Phase 2: เปิดเมื่อพร้อม
+  - path: ./services/tunnels/compose.yaml
 
-  # --- PostgreSQL ---
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-legal_th}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-legal_th_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-legal_th}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-legal_th}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # --- Cloudflare Tunnel ---
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN:-}
-    depends_on:
-      - app
-    restart: unless-stopped
-    profiles:
-      - tunnel
-
-volumes:
-  pgdata:
+networks:
+  legal-th-net:
+    driver: bridge
+    name: legal-th-net

@@ -23,7 +23,7 @@ services:
       retries: 3
       start_period: 15s
 
-  db:
+  postgres:
     deploy:
       resources:
         limits:
@@ -32,11 +32,8 @@ services:
         reservations:
           cpus: "0.25"
           memory: 128M
-    # prd: ไม่ expose port ออกนอก
-    ports: !reset []
 
-  tunnel:
-    profiles: !reset []
+  tunnel-app:
     deploy:
       resources:
         limits:
