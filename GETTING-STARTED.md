@@ -9,7 +9,7 @@
 ```bash
 git clone https://github.com/monthop-gmail/legal-th-server.git
 cd legal-th-server
-docker compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 รอจน log ขึ้นว่า server running แล้วทดสอบ:
@@ -25,7 +25,7 @@ curl http://localhost:3000/health
 | URL | ใช้ทำอะไร |
 |-----|---------|
 | http://localhost:3000 | MCP Server |
-| http://localhost:8080 | Adminer (ดู DB) — server: `db`, user: `legal_th`, pass: `legal_th_pass` |
+| http://localhost:8080 | Adminer (ดู DB) — server: `postgres`, user: `legal_th`, pass: `legal_th_pass` |
 
 ---
 
@@ -66,7 +66,7 @@ Schema อยู่ที่ `src/models/schema.ts` แล้ว ให้รั
 
 ```bash
 # เข้าไปใน container
-docker compose -f docker-compose.dev.yml exec app sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec app sh
 
 # ใน container: generate migration
 npx drizzle-kit generate
@@ -281,7 +281,7 @@ seed().catch(console.error);
 ### 4.3 รัน Seed
 
 ```bash
-docker compose -f docker-compose.dev.yml exec app npm run db:seed
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec app npm run db:seed
 ```
 
 แล้วเปิด Adminer (http://localhost:8080) ตรวจว่าข้อมูลเข้า DB แล้ว
@@ -525,7 +525,7 @@ curl -s -X POST http://localhost:3000/mcp \
 ## 7. Checklist ทีม
 
 ### สัปดาห์ 1
-- [ ] `docker compose -f docker-compose.dev.yml up` รันได้
+- [ ] `docker compose -f docker-compose.yml -f docker-compose.dev.yml up` รันได้
 - [ ] สร้าง `src/utils/db.ts`
 - [ ] รัน migration สร้างตาราง
 - [ ] เตรียม JSON data: categories + 5 กฎหมายแรก + 20 ศัพท์ + 2 templates
@@ -568,7 +568,7 @@ curl -s -X POST http://localhost:3000/mcp \
 
 ## ถามอะไรก็ถามได้
 
-- **ปัญหา Docker** → ดู logs: `docker compose -f docker-compose.dev.yml logs -f`
+- **ปัญหา Docker** → ดู logs: `docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f`
 - **ปัญหา DB** → เปิด Adminer: http://localhost:8080
-- **ปัญหา API** → ดู server log: `docker compose -f docker-compose.dev.yml logs -f app`
+- **ปัญหา API** → ดู server log: `docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f app`
 - **Spec เต็ม** → อ่าน `legal-th-server-spec.md`
